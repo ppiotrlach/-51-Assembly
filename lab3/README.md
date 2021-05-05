@@ -4,199 +4,154 @@
 ##### Piotr Łach 256761
 ##### Jakub Szpak 252782
 
-#### Temat: Arytmetyka, logika, pamięć, diody i brzęczyki
+#### Temat: Wyświetlacz LCD
 
 ### Zadanie 1
 
-Zadanie pierwsze polegało na napisaniu programu odejmującego dwie liczby 16-bitowe. Bliźniaczy program (dodający dwie liczby 16-bitowe) przedstawił nam na laboratoriach prowadzący, stąd wykonanie tego zadania nie stanowiło dla nas problemu. 
+Zadanie pierwsze polegało na napisaniu programu wiążącego guziki przypięte do P3 z wyświetlaczem LCD, ponieważ nie mamy fizycznego dostępu do układu ZD537 linie kodu operujące na nim są w programie zakomentowane, a program symuluje wyświetlanie w pamięci XRAM. Po naciśnięciu jednego z przycisków wyświetla się przypisany do niego tekst (4 przyciski - 4 różne teksty). Naciśnięcie dwóch skrajnych przycisków oznacza wyjście z programu. Warto zaznaczyć, że w programie symulacja naciskania przycisku odbywa się przez przypisanie na odpowiedni adres bitu 1 (Peripherals -> I/O-Ports -> Port 3), a większa część programu to kod prowadzącego. 
 
 ```assembly
-    
-    ;1 liczba = 8 starszych bitow w r0, 8 mlodszych bity w r1 np 0x4321
-	;2 liczba = 8 starszych bitow w r2, 8 mlodszych bitow w r3 np 0x1234
-	;wynik w r4 (8 starszych bitow), r5 (8 mlodszych bitow)
+
+	;deklaracje tekstów
+	text1:  db "AAAAAAAAAA",00
+	text2:	db "BBBBBBBBBB",00
+	text3:	db "CCCCCCCCCC",00
+	text4: 	db "DDDDDDDDDD",00
+
+
+	...
+
+	start:	
+		//init_LCD
+
 	
-	mov r0, #43h
-	mov r1, #21h
+	;LCDcntrlWR #CLEAR ;wyczysc zawartosc wyswietlacza
+	;LCDcntrlWR #HOME ;ustaw kursor na pierwsza linie wyswietlacza
 	
-	mov r2, #12h
-	mov r3, #34h
+	clr p3.2 ;ustaw p3.2 na 0
+	clr p3.3
+	clr p3.4
+	clr p3.5
 	
-	mov a, r1
-	subb a, r3          ;A ← A − R3 − CY, A=R1, CY = 0, po wykonaniu tego rozkazu flaga CY = 1 
-                        ;(0x21-0x34, odejmujemy większą liczbę od mniejszej)
-	mov r5, a           ;wynik zapisz w r5
 	
-	mov a, r0
-	subb a, r2          ;A ← A − R2 − CY,A = R0 CY = 1
-	mov r4, a           ;wynik zapisz w r4
+	wait_for_input:
+	;acall delay
+	mov r6, #0FFH	; adres LCDdataWR equ 0FF30H jest w parze R6-R7
+	mov r7, #30H
+	
+	
+	jb p3.2, print_text1 ;jesli bit p3.2 ustawiony na 1 przejdz do print_text1
+	jb p3.3, print_text2 
+	jb p3.4, print_text3 
+	jb p3.5, print_text4 
+	sjmp wait_for_input
+	
+	
+print_text4:
+	mov dptr, #text4 ;wskaz dptr text4
+	acall putstrLCD ;wywolaj putstrLCD
+	;acall delay
+	ljmp wait_for_input ;skocz do start
+	
+print_text3:
+	mov dptr, #text3 
+	acall putstrLCD 
+	;acall delay
+	ljmp wait_for_input	
+	
+print_text2:
+	mov dptr, #text2 
+	acall putstrLCD 
+	;acall delay
+	ljmp wait_for_input
+	
+print_text1:
+	jb p3.5, exit ;jesli p3.5 (rowniez p3.2) ustawiony na 1, zakoncz program
+	mov dptr, #text1 
+	acall putstrLCD 
+	;acall delay
+	ljmp wait_for_input		
+	
+	...
 ```
-
-Rezultat wykonania powyższego fragmentu kodu:
-r4 = 0x30
-r5 = 0xed
-
-0x4321 - 0x1234 = 0x30ed
 
 ### Zadanie 2
 
-W zadaniu drugim należało przygotować program realizujący sortowanie bąbelkowe lub znajdujący minimum albo maksimum tablicy 1-wymiarowej rozpoczynającej się od adresu 8000H pamięci zewnętrznej danych (XRAM) i obejmującej 16 kolejnych komórek tej tablicy. Wybraliśmy wariant znajdujący maksimum.
+W zadaniu drugim należało przygotować program realizujący wyświetlanie na ekranie LCD łańcucha znaków znacząco przekraczającego 16 symboli. Tekst jest kolejno:
+- wyświetlany w pierwszej linii (16 znaków)
+- wyświetlany w drugiej linii (kolejne 16 znaków)
+- delay
+- kasowanie zawartości wyświetlacza
+- wróć do podpunktu 1 z pozostałymi znakami (niewyświetlonymi wcześniej)
+
+Program ma się zakończyć w momencie wyświetlenia wszystkich znaków zdefiniowanego łańcucha.
+
+Jak w zadaniu pierwszym program jest symulacją, kod operujący na samym wyświetlaczu oczywiście jest zawarty w programach (i zakomentowany), ale nie mieliśmy szansy sprawdzić czy wykona on się poprawnie na realnym sprzęcie.
+
+W tym programie kluczową instrukcją jest
+ ```assembly
+ djnz r4, putstrLCD 
+ ```
+ która sprawdza czy ostatnio wypisywana linia była w pierwszym czy drugim rzędzie wyświetlacza i na tej podstawie wykonuje odpowiedni skok.
 
 ```assembly	
-	dane: db 4,2,6,8,10,12,14,16,1,3,5,7,9,11,13,15,00	
-	start:	
+	// deklaracje tekstów
+	text1:  db "Pszczolka Maja sobie lata oh oh oh zbiera nektar gdzies na kwiatach a tam Gucio w tulipanie czeka sobie na sniadanie",00
+
+	...
+
+	mov  83h, 05h			; DPH - 83h, r5 - 05h czyli MOV DPH, R5
+	mov  82h, 06h			; DPL - 82h, r6 - 06h czyli MOV DPL, R6 ; – wskazuje gotowosc LCD
+	  ; symulacja wyswietlacza w pamieci XRAM pod adresem X: 0FF30H
+	  
+      ; MOV  DPTR,#LCDdataWR  ; DPTR zaladowany adresem do podania bajtu sterujacego
+	  ; powyzsza linijka zakomentowana, program jest symulacja wyswietlania na wyswietlaczu LCD
+
+	...
+
+	//funkcja wypisania lancucha znaków dowlonej dlugosci w pamieci XRAM na 32 bajtach zaczynajac od adresu 0FF30h
+putstrLCD:
+		mov r5, #0FFH ; adres LCDdataWR equ 0FF0H jest w parze r5-r6
+		mov r6, #30H 
+		push dph
+		push dpl ; odlozenie wskaznika dptr na stos przed uzyciem MACRO
+		LCDcntrlWR #CLEAR
+		LCDcntrlWR #HOME
+		pop dpl 
+		pop dph ; zdjecie ze stosu wskaznika dptr
+		mov r4, #1H ; r4 jest miernikiem czy "petla" nextword wykonuje sie po raz pierwszy czy drugi
+		; jesli jest to pierwsze przejscie, na pierwszej linijce wyswietlacza to w r4 jest wartosc 1 i po operacji djnz r4 putstrLCD(ktora dekrementuje r4 przed porownaniem)
+		; nie wykona sie skok do putstrLCD i nastapia operacje przenoszace wskaznik w wyswietlaczu na druga linie oraz wypisanie na niej kolejnych 16B tekstu
+		; ponowne dojscie programu do linii djnz r4, putstrLCD wykona skok do putstrLCD
+nextword:
+		mov r7, #10H ; licznik r7 odlicza 16 bajtow czyli tyle ile miescie sie w jednej linii na wyswietlaczu
+nextchar:
+		clr a
+		movc a, @a+dptr
+		jz koniec ; skok do konca jesli wskaznik doszedl do 0 konczacego tekst
+		push dph
+		push dpl
+		acall putcharLCD ; wypisanie jednej literki
+		pop dpl
+		pop dph
+		inc r6 ; inkrementacja miejsca w ktore wpisujemy tekst
+		inc dptr ; inkrementacja wskaznika na aktualnie wypisywana litere w slowie 
+		djnz r7, nextchar ; jesli wskaznik doszedl od 16 do 0 to znaczy ze nalezy zmienic linie
+		djnz r4, putstrLCD ; ta petla zostala wytlumaczona nad dyrektywa nextword:
+		push dph
+		push dpl
+		LCDcntrlWR #HOM2 ; przeskok do nowej linii
+		pop dpl
+		pop dph
+		; acall delay
+		sjmp nextword
+	koniec: ret
+
+// program glówny
+	start:	init_LCD
 	
-	mov dptr, #8000h	; wskazanie dptr pierwszej interesujacej nas komorki pamieci
-	
-	;zaladowanie danych testowych (wartosci od 1 do 16) [4,2,6,8,10,12,14,16,1,3,5,7,9,11,13,15]
-	
-	push dph			; zapisanie aktualnej wartosci wskaznika dptr na stosie
-	push dpl			; -- || --
-	mov a, #00h
-	mov r0, #00h
-	load:
-	mov dptr, #dane		; ustawienie dptr na pierwsza wartosc tablicy w pamieci kodu
-	mov a, r0
-	movc a, @a+dptr		; przeniesienie wartosci z pamieci kodu do akumulatora przesuniete o wartosc a
-	jz init				; skok jesli a == 0, ostatnia wartosc tablicy musi byc 0 (gwarancja)
-	
-	pop dpl				; zdjecie wskaznika dptr ze stosu
-	pop dph				; -- || --
-	movx @dptr, a		; wpisanie wartosci akumulatora do XRAM
-	inc dptr			
-	push dph
-	push dpl
-	inc r0
-	sjmp load			
-	
-	init:
-	mov dptr, #8000h    ;po inkrementacjach dptr powrot do pierwszej komorki
-	movx a, @dptr
-	mov r1, a	        ;przypisanie wartosci pierwszej komorki pamieci zewnetrznej XRAM do r1,
-	                    ;po wykonaniu programu w r1 bedzie znajdowac sie najwyzsza wartosc 
-                        ;sposrod komorek X: 0x8000 - 0x800F
-	
-	
-	mov r0,#10h			;r0 = liczba elementow do sprawdzenia 0x10 = 16
-	loop:
-	inc dptr
-	movx a, @dptr
-	mov r2, a
-	subb a, r1 
-	jc loop_continue    ;jesli a jest mniejsze od r1 flaga cy zostanie ustawiona na 1 po operacji 
-                        ;odejmowania -> przeskocz do loop2 nie nadpisujac rejestru r1
-			
-	mov a ,r2           ;jesli a jest wieksze wykona sie ten kod programu 
-	mov r1, a           ;i wartosc r1 zostanie nadpisana wartoscia wieksza
-	
-	loop_continue:
-	dec r0
-	mov a, r0
-	jz exit              ;zakoncz program jesli a == 0 (jesli r0 == 0), kiedy sprawdzone
-                         ;zostaly wszystkie interesujace nas komorki
-	ljmp loop
-	
-			exit:
+		mov dptr, #text1
+		acall putstrLCD
+		; acall delay
+
 ```
-
-Rezultatem wykonania powyższego fragmentu kodu jest umiejscowienie najwyższej wartości spośród komórek X: 0x8000 - 0x800F w rejestrze r1. Dla danych testowych [4,2,6,8,10,12,14,16,1,3,5,7,9,11,13,15] jest to oczywiście 16, czyli 0x10.
-
-
-### Zadanie 3
-
-Ostatnie z zadań to przygotowanie programu realizującego ciekawe zapalanie/gaszenie diód podłączonych do portu P1.
-
-```assembly	
-    mov p1, a           ;zgaszenie wszystkich diod
-	
-	mov a, #01h
-
-	frst_sequence:
-	mov b, #02h
-	mov p1, a
-	mul ab                  ;pierwsza sekwencja to podanie na p1 ciagu [1,2,4,8,16,32,64,128], 
-                            ;efektem jest zapalanie sie diod od prawej do lewej strony
-	
-	jz scnd_sequence_init   ;skok jesli a = 0, rozkaz wykona sie po przemnozeniu przez 2 a = 0x80 
-                            ;(czyli 128, ostatniej interesujacej nas wartosci w sekwencji), 
-                            ;akumulator ma pojemnosc 8 bitow stad wyzerowanie akumulatora
-                            ;i ustawienie na 1 flagi OV
-	jmp frst_sequence
-	
-	frst_sequence_init:
-	mov a, #02h
-	jmp frst_sequence
-	
-	scnd_sequence_init:
-	mov a, #40h
-	
-	scnd_sequence:
-	mov p1, a 
-	mov b, #02h 
-	div ab                  ;druga sekwencja to podanie na p1 ciagu [64,32,16,8,4,2,1], nie podajemy 128, 
-							;poniewaz to ostatnia wartosc podana w sekwencji pierwszej
-	
-	jz thrd_sequence_init   ;skok po podzieleniu przez 2 ostatniej wartosci sekwencji, tj. 1, 
-							;przy okazji zmiana stanu flagi parzystosci p
-	jmp scnd_sequence
-	
-	thrd_sequence_init:
-	mov r0, #01h
-	mov r1, #80h
-	
-	mov a, r1
-	add a, r0
-	thrd_sequence:
-	mov p1, a
-	mov b, #02h;
-	mov a, r0
-	mul ab
-	mov r0,a
-	
-	mov b, #02h
-	mov a, r1
-	div ab                  ;w trzeciej sekwencji pomocne byly rejestry r0 i r1, r0 w kazdej iteracji petli 
-                            ;jest mnozony przez 2 od wartosci poczatkowej 0x01, r1 z kolei dzielony od 
-                            ;wartosci 0x80 (128), dzieki sumowaniu tych wartosci i podawaniu ich na p1
-							;osiagnelismy efekt zbiegania sie diod od lewej i prawej strony, a nastepnie
-                            ;ich wyminiecie ***mnozenie, dzielenie i sumowanie rejestrow odbylo sie 
-                            ;oczywiscie z wykorzystaniem akumulatora
-
-                            ;trzecia sekwencja to podanie na p1 ciagu [129, 66, 36, 24, 24, 36, 66, 129] 
-	
-	
-	mov r1, a
-	add a, r0
-	
-	jz frst_sequence_init   ;powrot do pierwszej sekwencji gdy a = 0
-	jmp thrd_sequence
-```
-
-Rezultat działania programu to wyświetlenia następującej sekwencji:
-
-
-
-|   |   |   |   |   |   |   | x |
-|---|---|---|---|---|---|---|---|
-|   |   |   |   |   |   | x |   |
-|   |   |   |   |   | x |   |   |
-|   |   |   |   | x |   |   |   |
-|   |   |   | x |   |   |   |   |
-|   |   | x |   |   |   |   |   |
-|   | x |   |   |   |   |   |   |
-| x |   |   |   |   |   |   |   |
-|   | x |   |   |   |   |   |   |
-|   |   | x |   |   |   |   |   |
-|   |   |   | x |   |   |   |   |
-|   |   |   |   | x |   |   |   |
-|   |   |   |   |   | x |   |   |
-|   |   |   |   |   |   | x |   |
-|   |   |   |   |   |   |   | x |
-| x |   |   |   |   |   |   | x |
-|   | x |   |   |   |   | x |   |
-|   |   | x |   |   | x |   |   |
-|   |   |   | x | x |   |   |   |
-|   |   |   | x | x |   |   |   |
-|   |   | x |   |   | x |   |   |
-|   | x |   |   |   |   | x |   |
-| x |   |   |   |   |   |   | x |
