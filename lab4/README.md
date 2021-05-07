@@ -4,154 +4,277 @@
 ##### Piotr Łach 256761
 ##### Jakub Szpak 252782
 
-#### Temat: Wyświetlacz LCD
+#### Temat: Klawiatura
 
 ### Zadanie 1
 
-Zadanie pierwsze polegało na napisaniu programu wiążącego guziki przypięte do P3 z wyświetlaczem LCD, ponieważ nie mamy fizycznego dostępu do układu ZD537 linie kodu operujące na nim są w programie zakomentowane, a program symuluje wyświetlanie w pamięci XRAM. Po naciśnięciu jednego z przycisków wyświetla się przypisany do niego tekst (4 przyciski - 4 różne teksty). Naciśnięcie dwóch skrajnych przycisków oznacza wyjście z programu. Warto zaznaczyć, że w programie symulacja naciskania przycisku odbywa się przez przypisanie na odpowiedni adres bitu 1 (Peripherals -> I/O-Ports -> Port 3), a większa część programu to kod prowadzącego. 
+Zadanie pierwsze polegało na napisaniu programu umożliwiającego wybór i przypisanie do klawiszy klawiatury trzech zestawów symboli, w zależności od kliknięcia przycisku wybranego symbolu specjalnego tzn.:
+- przycisk * - małe litery od a do m
+
+| a | b | c | d |
+|---|---|---|---|
+| e | f | g | h |
+| i | j | k | l |
+| * | m | # | D |
+
+- przycisk # - duże litery od a do m
+
+| A | B | C | D |
+|---|---|---|---|
+| E | F | G | H |
+| I | J | K | L |
+| * | M | # | D |
+
+- przycisk D - standardowy układ klawiatury - cyfry od 0 do 9 oraz znaki A, B, C
+
+| 1 | 2 | 3 | A |
+|---|---|---|---|
+| 4 | 5 | 6 | B |
+| 7 | 8 | 9 | C |
+| * | 0 | # | D |
+
+Znaki specjalne nie są wyświetlane tak jak na przykład klawisz Caps Lock. 
 
 ```assembly
 
-	;deklaracje tekstów
-	text1:  db "AAAAAAAAAA",00
-	text2:	db "BBBBBBBBBB",00
-	text3:	db "CCCCCCCCCC",00
-	text4: 	db "DDDDDDDDDD",00
+//kody skaningowe znakow specjalnych
+#define ASTERISK 0xE7
+#define HASH 0xED
+#define LETTER_D 0xEE
 
+...
 
-	...
+// tablica przekodowania klawiszy - ASCII w XRAM
+smallletters: ;po kliknieciu * - male litery od a do m
+			mov dptr, #8077H
+			mov a, #"a"
+			movx @dptr, a
+			
+			mov dptr, #807BH
+			mov a, #"b"
+			movx @dptr, a
+			
+...
 
-	start:	
-		//init_LCD
+greatletters:;po kliknieciu # duze litery od A do M		
+			mov dptr, #8077H
+			mov a, #"A"
+			movx @dptr, a
+			
+			mov dptr, #807BH
+			mov a, #"B"
+			movx @dptr, a
+			
 
+...
+
+keyascii:	;po kliknieciu D - cyfry 0-9 oraz znaki A, B, C
+			mov dptr, #80EBH
+			mov a, #"0"
+			movx @dptr, a
+			
+			mov dptr, #8077H
+			mov a, #"1"
+			movx @dptr, a
+		
+...
+
+// program glówny
+    start:  init_LCD
 	
-	;LCDcntrlWR #CLEAR ;wyczysc zawartosc wyswietlacza
-	;LCDcntrlWR #HOME ;ustaw kursor na pierwsza linie wyswietlacza
+	callkeyascii:
+			acall keyascii
+			jmp key_1
+			
+	callsmallletters:
+			acall smallletters
+			jmp key_1
 	
-	clr p3.2 ;ustaw p3.2 na 0
-	clr p3.3
-	clr p3.4
-	clr p3.5
+	callgreatletters:
+			acall greatletters
+			
+			
+			
 	
-	
-	wait_for_input:
-	;acall delay
-	mov r6, #0FFH	; adres LCDdataWR equ 0FF30H jest w parze R6-R7
-	mov r7, #30H
-	
-	
-	jb p3.2, print_text1 ;jesli bit p3.2 ustawiony na 1 przejdz do print_text1
-	jb p3.3, print_text2 
-	jb p3.4, print_text3 
-	jb p3.5, print_text4 
-	sjmp wait_for_input
-	
-	
-print_text4:
-	mov dptr, #text4 ;wskaz dptr text4
-	acall putstrLCD ;wywolaj putstrLCD
-	;acall delay
-	ljmp wait_for_input ;skocz do start
-	
-print_text3:
-	mov dptr, #text3 
-	acall putstrLCD 
-	;acall delay
-	ljmp wait_for_input	
-	
-print_text2:
-	mov dptr, #text2 
-	acall putstrLCD 
-	;acall delay
-	ljmp wait_for_input
-	
-print_text1:
-	jb p3.5, exit ;jesli p3.5 (rowniez p3.2) ustawiony na 1, zakoncz program
-	mov dptr, #text1 
-	acall putstrLCD 
-	;acall delay
-	ljmp wait_for_input		
-	
-	...
+	key_1:	mov r0, #LINE_1 ;0111 1111 sterowanie na p5
+			mov	a, r0
+			mov	P5, a ;linia 1 na p5
+			mov a, P7 ;wartosc p7 do a
+			anl a, r0 ;and p7 i p5
+			mov r2, a ;wynik do r2 na pozniej
+			clr c
+			subb a, r0 ;sprawdzenie czy cokolwiek bylo klikniete
+			jz key_2 ;jesli nie skocz do key2
+			mov a, r2 ;jesli tak przywroc wartosc do a
+			mov dph, #80h 
+			mov dpl, a ;dpl = kod skaningowy klawisza
+			movx a,@dptr ; ascii klawisza do a
+			mov P1, a ; wyswietl na p1
+			acall putcharLCD
+			;acall delay
+			
+...
+			
+	key_4:	mov r0, #LINE_4
+			mov	a, r0
+			mov	P5, a
+			mov a, P7
+			anl a, r0
+			mov r2, a
+			clr c
+			subb a, r0
+			jz key_1 ;skok jesli nie kliknieto nic
+			
+			;sprawdzenie czy kliknieto "*", kod skaningowy = 0xE7
+			mov a, r2
+			clr c
+			subb a, #ASTERISK
+			jz callsmallletters
+			
+			;sprawdzenie czy kliknieto "#", kod skaningowy = 0xED
+			mov a, r2
+			clr c
+			subb a, #HASH
+			jz callgreatletters
+			
+			;sprawdzenie czy kliknieto "D", kod skaningowy = 0xEE
+			mov a, r2
+			clr c
+			subb a, #LETTER_D
+			jz callkeyascii
+			
+			
+			;ostatni przypadek to wyswietlenie znaku niefunkcjonalnego
+			mov a, r2
+			mov dph, #80h
+			mov dpl, a
+			movx a,@dptr
+			mov P1, a
+			
+			acall putcharLCD
+			
+			jmp key_1        
+ 
+    nop
+    nop
+    nop
+    jmp $
+    end start
 ```
 
 ### Zadanie 2
 
-W zadaniu drugim należało przygotować program realizujący wyświetlanie na ekranie LCD łańcucha znaków znacząco przekraczającego 16 symboli. Tekst jest kolejno:
-- wyświetlany w pierwszej linii (16 znaków)
-- wyświetlany w drugiej linii (kolejne 16 znaków)
-- delay
-- kasowanie zawartości wyświetlacza
-- wróć do podpunktu 1 z pozostałymi znakami (niewyświetlonymi wcześniej)
+W zadaniu drugim należało przygotować program automatycznie przechodzący do drugiej linii po zapełnieniu pierwszej z nich. Następnie w przypadku zapełnienia linii drugiej zawartość wyświetlacza jest czyszczona - tekst wypisywany jest ponownie w pierwszej.
 
-Program ma się zakończyć w momencie wyświetlenia wszystkich znaków zdefiniowanego łańcucha.
+Znaki podawane są przez użytkownika z klawiatury o standardowym formacie:
 
-Jak w zadaniu pierwszym program jest symulacją, kod operujący na samym wyświetlaczu oczywiście jest zawarty w programach (i zakomentowany), ale nie mieliśmy szansy sprawdzić czy wykona on się poprawnie na realnym sprzęcie.
+| 1 | 2 | 3 | A |
+|---|---|---|---|
+| 4 | 5 | 6 | B |
+| 7 | 8 | 9 | C |
+| * | 0 | # | D |
 
-W tym programie kluczową instrukcją jest
- ```assembly
- djnz r4, putstrLCD 
- ```
- która sprawdza czy ostatnio wypisywana linia była w pierwszym czy drugim rzędzie wyświetlacza i na tej podstawie wykonuje odpowiedni skok.
+<br>
+Niezwykle pomocnym okazał się program napisany na poprzednie laboratoria (3) - program drugi, realizujący wyświetlanie na ekranie LCD łańcucha znaków znacząco przekraczającego 16 symboli.
+
+<br> 
+
+W dyrektywie putstrLCD zamieniliśmy wypisanie symbolu z wcześniej zdefiniowanego ciągu znaków umieszczonego w pamięci programu na wypisywanie symbolu z klawiatury.
+
+<br>
 
 ```assembly	
-	// deklaracje tekstów
-	text1:  db "Pszczolka Maja sobie lata oh oh oh zbiera nektar gdzies na kwiatach a tam Gucio w tulipanie czeka sobie na sniadanie",00
-
-	...
-
+...
 	mov  83h, 05h			; DPH - 83h, r5 - 05h czyli MOV DPH, R5
 	mov  82h, 06h			; DPL - 82h, r6 - 06h czyli MOV DPL, R6 ; – wskazuje gotowosc LCD
-	  ; symulacja wyswietlacza w pamieci XRAM pod adresem X: 0FF30H
+	;symulacja wyswietlacza w pamieci XRAM pod adresem X: 0FF30H
 	  
-      ; MOV  DPTR,#LCDdataWR  ; DPTR zaladowany adresem do podania bajtu sterujacego
-	  ; powyzsza linijka zakomentowana, program jest symulacja wyswietlania na wyswietlaczu LCD
+    ;MOV  DPTR,#LCDdataWR  ; DPTR zaladowany adresem do podania bajtu sterujacego
+	;powyzsza linijka zakomentowana, program jest symulacja wyswietlania na wyswietlaczu LCD
+...
 
-	...
+keyascii:	mov dptr, #80EBH
+			mov a, #"0"
+			movx @dptr, a
+			
+			mov dptr, #8077H
+			mov a, #"1"
+			movx @dptr, a
 
-	//funkcja wypisania lancucha znaków dowlonej dlugosci w pamieci XRAM na 32 bajtach zaczynajac od adresu 0FF30h
-putstrLCD:
+...
+
+// program glówny
+    start:  init_LCD
+	
+		acall keyascii
+		
+		putstrLCD:
+	
 		mov r5, #0FFH ; adres LCDdataWR equ 0FF0H jest w parze r5-r6
 		mov r6, #30H 
-		push dph
-		push dpl ; odlozenie wskaznika dptr na stos przed uzyciem MACRO
 		LCDcntrlWR #CLEAR
 		LCDcntrlWR #HOME
-		pop dpl 
-		pop dph ; zdjecie ze stosu wskaznika dptr
 		mov r4, #1H ; r4 jest miernikiem czy "petla" nextword wykonuje sie po raz pierwszy czy drugi
 		; jesli jest to pierwsze przejscie, na pierwszej linijce wyswietlacza to w r4 jest wartosc 1 i po operacji djnz r4 putstrLCD(ktora dekrementuje r4 przed porownaniem)
 		; nie wykona sie skok do putstrLCD i nastapia operacje przenoszace wskaznik w wyswietlaczu na druga linie oraz wypisanie na niej kolejnych 16B tekstu
 		; ponowne dojscie programu do linii djnz r4, putstrLCD wykona skok do putstrLCD
-nextword:
+	nextword:
 		mov r7, #10H ; licznik r7 odlicza 16 bajtow czyli tyle ile miescie sie w jednej linii na wyswietlaczu
-nextchar:
+	nextchar:
 		clr a
-		movc a, @a+dptr
-		jz koniec ; skok do konca jesli wskaznik doszedl do 0 konczacego tekst
-		push dph
-		push dpl
+		
+	key_1:	mov r0, #LINE_1 ;0111 1111 sterowanie na p5
+			mov	a, r0
+			mov	P5, a ;linia 1 na p5
+			mov a, P7 ;wartosc p7 do a
+			anl a, r0 ;and p7 i p5
+			mov r2, a ;wynik do r2 na pozniej
+			clr c
+			subb a, r0 ;sprawdzenie czy cokolwiek bylo klikniete
+			jz key_2 ;jesli nie skocz do key2
+			mov a, r2 ;jesli tak przywroc wartosc do a
+			mov dph, #80h 
+			mov dpl, a ;dpl = kod skaningowy klawisza
+			movx a,@dptr ; ascii klawisza do a
+			mov P1, a ; wyswietl na p1
+			jmp print
+			
+	...
+			
+	checkpoint:
+		jmp putstrLCD
+			
+	...
+			
+	key_4:	mov r0, #LINE_4
+			mov	a, r0
+			mov	P5, a
+			mov a, P7
+			anl a, r0
+			mov r2, a
+			clr c
+			subb a, r0
+			jz key_1
+			mov a, r2
+			mov dph, #80h
+			mov dpl, a
+			movx a,@dptr
+			mov P1, a
+			jmp print
+			
+			jmp key_1
+			
+		print:
+			
 		acall putcharLCD ; wypisanie jednej literki
-		pop dpl
-		pop dph
 		inc r6 ; inkrementacja miejsca w ktore wpisujemy tekst
-		inc dptr ; inkrementacja wskaznika na aktualnie wypisywana litere w slowie 
 		djnz r7, nextchar ; jesli wskaznik doszedl od 16 do 0 to znaczy ze nalezy zmienic linie
-		djnz r4, putstrLCD ; ta petla zostala wytlumaczona nad dyrektywa nextword:
-		push dph
-		push dpl
+		
+		djnz r4, checkpoint ; ta petla zostala wytlumaczona nad dyrektywa nextword:
 		LCDcntrlWR #HOM2 ; przeskok do nowej linii
-		pop dpl
-		pop dph
 		; acall delay
 		sjmp nextword
-	koniec: ret
-
-// program glówny
-	start:	init_LCD
-	
-		mov dptr, #text1
-		acall putstrLCD
-		; acall delay
-
+            
+...
 ```
+Warto zaznaczyć, że bazą napisanych przez nas programów są programy omawiane przez prowadzącego na laboratoriach.
