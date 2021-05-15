@@ -7,4 +7,4 @@ mov labx, yourself ;to check details
 
 ```
 
-Contributors: [kubaszpak](https://github.com/kubaszpak)
+Contributor: [kubaszpak](https://github.com/kubaszpak)
