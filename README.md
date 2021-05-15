@@ -6,3 +6,5 @@
 mov labx, yourself ;to check details
 
 ```
+
+Contributors: [kubaszpak](https://github.com/kubaszpak)
